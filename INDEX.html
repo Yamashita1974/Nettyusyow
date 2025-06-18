@@ -47,10 +47,35 @@
             box-shadow: inset 0 0 0 3px #3b82f6; /* blue-500 */
             z-index: 30;
         }
+        /* ローディング中の背景 */
+        .content-loading {
+            filter: blur(4px);
+            opacity: 0.6;
+            transition: filter 0.3s, opacity 0.3s;
+        }
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.7);
+            z-index: 9998;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="app" class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
+    <div id="loader" class="loader-overlay hidden">
+        <i class="fas fa-spinner fa-spin fa-3x text-blue-500"></i>
+        <p class="mt-4 text-gray-600 font-semibold">データを取得中...</p>
+    </div>
+
+    <div id="app-container" class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
         
         <!-- ヘッダー -->
         <header class="text-center mb-6">
@@ -78,12 +103,6 @@
             <!-- History buttons will be inserted here -->
         </div>
 
-        <!-- ローディングスピナー -->
-        <div id="loader" class="text-center py-10 hidden">
-            <i class="fas fa-spinner fa-spin fa-3x text-blue-500"></i>
-            <p class="mt-2 text-gray-600">データを取得中...</p>
-        </div>
-
         <!-- エラーメッセージ -->
         <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
             <p class="font-bold">エラー</p>
@@ -91,10 +110,10 @@
         </div>
 
         <!-- メインコンテンツ -->
-        <div id="main-content" class="hidden">
+        <div id="main-content">
             <!-- 現在の状況 -->
             <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 id="locationName" class="text-2xl font-bold text-gray-800 text-center mb-4"></h2>
+                <h2 id="locationName" class="text-2xl font-bold text-gray-800 text-center mb-4">--</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                     <!-- WBGTゲージ -->
                     <div class="relative w-48 h-48 mx-auto">
@@ -230,6 +249,7 @@ const RISK_LEVELS = {
 };
 
 // --- DOM ELEMENTS ---
+const appContainer = document.getElementById('app-container');
 const cityInput = document.getElementById('cityInput');
 const searchBtn = document.getElementById('searchBtn');
 const gpsBtn = document.getElementById('gpsBtn');
@@ -293,13 +313,18 @@ const getWeatherIconClass = (iconCode) => {
 // --- UI UPDATE FUNCTIONS ---
 
 const setUIState = (state) => {
-    loader.classList.add('hidden');
     errorMessage.classList.add('hidden');
-    mainContent.classList.add('hidden');
-
-    if (state === 'loading') loader.classList.remove('hidden');
-    else if (state === 'error') errorMessage.classList.remove('hidden');
-    else if (state === 'success') mainContent.classList.remove('hidden');
+    
+    if (state === 'loading') {
+        loader.classList.remove('hidden');
+        appContainer.classList.add('content-loading');
+    } else {
+        loader.classList.add('hidden');
+        appContainer.classList.remove('content-loading');
+        if (state === 'error') {
+            errorMessage.classList.remove('hidden');
+        }
+    }
 };
 
 const displayError = (message) => {
@@ -317,8 +342,8 @@ const updateGauge = (wbgt) => {
 };
 
 const generateWbgtTable = () => {
-    const temps = Array.from({length: 11}, (_, i) => 25 + i); // 25°C to 35°C
-    const humids = Array.from({length: 11}, (_, i) => 40 + i * 5); // 40% to 90%
+    const temps = Array.from({length: 11}, (_, i) => 25 + i);
+    const humids = Array.from({length: 11}, (_, i) => 40 + i * 5);
 
     let headerHtml = '<tr><th class="border">温度℃ / 湿度%</th>';
     humids.forEach(h => headerHtml += `<th class="border">${h}</th>`);
@@ -379,17 +404,20 @@ const renderWeatherData = (data) => {
     updateGauge(currentWbgtVal);
 
     highlightCurrentCellInTable(currentTempVal, currentHumidityVal);
-    addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
+    if(data.isNewSearch) {
+      addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
+    }
+
 
     // 2. Today's Max WBGT (next 24h)
     const hourlyData = data.forecast.list || [];
-    const next24hForecasts = hourlyData.slice(0, 8);
+    const next24hForecasts = hourlyData.slice(0, 8); // 3-hour intervals for 24 hours
     let maxWbgtInfo = { wbgt: -999, dt: 0 };
     if (next24hForecasts.length > 0) {
         maxWbgtInfo = next24hForecasts.map(item => ({
             wbgt: calculateWBGT(item.main.temp, item.main.humidity),
             dt: item.dt
-        })).reduce((max, current) => (current.wbgt > max.wbgt) ? current : max, { wbgt: -999, dt: 0 });
+        })).reduce((max, current) => (current.wbgt > max.wbgt) ? current : max, { wbgt: currentWbgtVal, dt: data.current.dt });
     }
 
     if (maxWbgtInfo.dt > 0) {
@@ -504,7 +532,7 @@ const renderSearchHistory = () => {
             button.textContent = location.name;
             button.onclick = () => {
                 cityInput.value = location.name;
-                fetchWeather(location.lat, location.lon, location.name);
+                fetchWeather(location.lat, location.lon, location.name, false);
             };
             historyContainer.appendChild(button);
         });
@@ -513,7 +541,7 @@ const renderSearchHistory = () => {
 
 
 // --- API FETCH LOGIC ---
-const fetchWeather = async (lat, lon, locationName) => {
+const fetchWeather = async (lat, lon, locationName, isNewSearch = true) => {
     setUIState('loading');
     const currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
@@ -528,7 +556,7 @@ const fetchWeather = async (lat, lon, locationName) => {
         
         if (!currentData.main || !forecastData.list) throw new Error("気象サービスから不完全なデータを受信しました。");
         
-        renderWeatherData({ locationName, current: currentData, forecast: forecastData });
+        renderWeatherData({ locationName, current: currentData, forecast: forecastData, isNewSearch });
     } catch (error) {
         console.error("Fetch Weather Error:", error);
         displayError(`天気情報の取得に失敗しました: ${error.message}`);
@@ -565,15 +593,16 @@ const getWeatherByGPS = async () => {
         if (!navigator.geolocation) {
             throw new Error("お使いのブラウザは位置情報取得に対応していません。");
         }
+        // HTTPS接続でない場合もエラーとする
         if (!window.isSecureContext) {
              throw new Error("位置情報取得は安全な接続(HTTPS)でのみ利用可能です。");
         }
 
         const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: false,
-                timeout: 10000,
-                maximumAge: 0,
+                enableHighAccuracy: false, // 低精度で十分なので高速化
+                timeout: 10000, // 10秒でタイムアウト
+                maximumAge: 0, // 常に最新の位置情報を要求
             });
         });
 
@@ -603,7 +632,6 @@ const getWeatherByGPS = async () => {
 // --- EVENT LISTENERS & INITIALIZATION ---
 const handleSearch = () => {
     if (cityInput.value.trim()) {
-        setUIState('loading');
         getCoordsByCity(cityInput.value.trim());
     }
 };
@@ -633,9 +661,8 @@ window.addEventListener('load', () => {
     if (history.length > 0) {
         const lastLocation = history[0];
         cityInput.value = lastLocation.name;
-        fetchWeather(lastLocation.lat, lastLocation.lon, lastLocation.name);
+        fetchWeather(lastLocation.lat, lastLocation.lon, lastLocation.name, false);
     } else {
-        setUIState('loading');
         getCoordsByCity("東京");
     }
 });
