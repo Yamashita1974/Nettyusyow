@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>熱中症リスク予報</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+        }
+        .gauge-bg {
+            stroke: #e5e7eb; /* gray-200 */
+        }
+        .gauge-meter {
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease-out;
+        }
+        .modal {
+            transition: opacity 0.3s ease;
+        }
+        /* 早見表のスタイル */
+        .wbgt-table th, .wbgt-table td {
+            text-align: center;
+            padding: 0.5rem;
+            font-size: 0.8rem;
+            min-width: 50px;
+        }
+        .wbgt-table th:first-child, .wbgt-table td:first-child {
+            font-weight: 600;
+            background-color: #f9fafb; /* gray-50 */
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        .wbgt-table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f3f4f6; /* gray-200 */
+            z-index: 20;
+        }
+        /* ハイライト表示用のスタイル */
+        .highlight-cell {
+            position: relative; /* z-indexを有効にするために必要 */
+            box-shadow: inset 0 0 0 3px #3b82f6; /* blue-500 */
+            z-index: 30;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- ヘッダー -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">熱中症リスク予報</h1>
+            <p class="text-sm text-gray-500 mt-1">現場の安全管理をサポートします</p>
+        </header>
+
+        <!-- 場所検索 -->
+        <div class="bg-white rounded-xl shadow-md p-4 mb-4">
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="text" id="cityInput" placeholder="例: 東京都千代田区" class="flex-grow w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex gap-2">
+                    <button id="searchBtn" class="w-full sm:w-auto bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-search"></i> <span>検索</span>
+                    </button>
+                    <button id="gpsBtn" class="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2">
+                        <i class="fas fa-location-arrow"></i> <span>現在地</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 検索履歴 -->
+        <div id="historyContainer" class="flex flex-wrap gap-2 mb-6 justify-center">
+            <!-- History buttons will be inserted here -->
+        </div>
+
+        <!-- ローディングスピナー -->
+        <div id="loader" class="text-center py-10 hidden">
+            <i class="fas fa-spinner fa-spin fa-3x text-blue-500"></i>
+            <p class="mt-2 text-gray-600">データを取得中...</p>
+        </div>
+
+        <!-- エラーメッセージ -->
+        <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
+            <p class="font-bold">エラー</p>
+            <p id="error-text"></p>
+        </div>
+
+        <!-- メインコンテンツ -->
+        <div id="main-content" class="hidden">
+            <!-- 現在の状況 -->
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                <h2 id="locationName" class="text-2xl font-bold text-gray-800 text-center mb-4"></h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                    <!-- WBGTゲージ -->
+                    <div class="relative w-48 h-48 mx-auto">
+                        <svg class="w-full h-full" viewBox="0 0 36 36">
+                            <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3.8"></path>
+                            <path id="gaugeMeter" class="gauge-meter" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3.8" stroke-dasharray="100, 100" stroke-dashoffset="100"></path>
+                        </svg>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span class="text-xs text-gray-500">WBGT推定値</span>
+                            <span id="currentWbgt" class="text-5xl font-bold">--</span>
+                            <span class="text-xs text-gray-500">℃</span>
+                        </div>
+                    </div>
+                    <!-- リスク情報 -->
+                    <div class="text-center md:text-left">
+                        <p id="riskLevelText" class="text-3xl font-bold mb-2">---</p>
+                        <p class="text-gray-600 mb-4">現在の気象情報:</p>
+                        <div class="flex justify-center md:justify-start gap-4 text-gray-700">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-temperature-high text-red-500"></i>
+                                <span id="currentTemp">--℃</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-tint text-blue-500"></i>
+                                <span id="currentHumidity">--%</span>
+                            </div>
+                        </div>
+                         <div class="mt-4 border-t pt-4">
+                            <p class="text-sm font-semibold text-gray-700">今日の最高WBGT</p>
+                            <p class="text-xl font-bold text-red-600">
+                                <span id="maxWbgtValue">--</span>℃
+                                <span class="text-sm font-medium text-gray-500" id="maxWbgtTime">(--:--)</span>
+                            </p>
+                        </div>
+                        <button id="openModalBtn" class="mt-4 w-full md:w-auto bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+                            <i class="fas fa-book-open"></i> <span>対策ガイドを確認</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WBGT早見表 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                 <button id="toggleTableBtn" class="w-full text-left text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
+                    <span>WBGT早見表 (温度/湿度)</span>
+                    <i id="tableCaret" class="fas fa-chevron-down transition-transform"></i>
+                </button>
+                <div id="wbgtTableContainer" class="hidden overflow-x-auto">
+                    <table class="w-full border-collapse wbgt-table">
+                        <thead id="wbgtTableHeader"></thead>
+                        <tbody id="wbgtTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 時間別予報 -->
+            <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">時間別予報 (24時間)</h3>
+                <div class="overflow-x-auto">
+                    <div id="hourlyForecast" class="flex space-x-4 pb-2">
+                        <!-- Hourly cards will be inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 週間予報 -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">週間予報</h3>
+                <div id="dailyForecast" class="space-y-3">
+                    <!-- Daily items will be inserted here -->
+                </div>
+            </div>
+            
+            <!-- 免責事項 -->
+            <div class="text-center mt-8">
+                <p class="text-xs text-gray-500">
+                    ※本アプリが提供するWBGT(暑さ指数)は、公開されている気象データから独自の手法で推定した参考値です。<br>
+                    実際の作業環境のWBGT値とは異なる場合があります。必ず現地の状況を確認し、安全を最優先してください。
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 対策ガイド モーダル -->
+    <div id="safetyModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">熱中症 対策ガイド</h2>
+                    <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+                </div>
+                <div id="modalContent" class="prose max-w-none">
+                    <!-- Modal content will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+<script>
+// --- CONFIGURATION ---
+const API_KEY = "f8139ad62e30fe98dca264701ef32699"; 
+
+const RISK_LEVELS = {
+    DANGER: { 
+        level: '危険', color: '#ef4444', textColor: 'text-red-500', bgColor: 'bg-red-500', tableBgColor: 'bg-red-200',
+        advice: {
+            title: '原則、作業は中止',
+            details: ['涼しい室内へ避難する。', '激しい運動や作業は絶対に避ける。', 'こまめな水分・塩分補給はもちろん、体を冷やす工夫（濡れタオル、送風など）を行う。']
+        }
+    },
+    SEVERE_VIGILANCE: { 
+        level: '厳重警戒', color: '#f97316', textColor: 'text-orange-500', bgColor: 'bg-orange-500', tableBgColor: 'bg-orange-200',
+        advice: {
+            title: '激しい作業は避け、休憩を頻繁に',
+            details: ['熱中症の危険性が高い状態。屋外での激しい運動や作業は避ける。', '1時間に1回など、こまめに休憩を取り、涼しい場所で体を休める。', '積極的に水分・塩分を補給する。']
+        }
+    },
+    VIGILANCE: { 
+        level: '警戒', color: '#f59e0b', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500', tableBgColor: 'bg-yellow-200',
+        advice: {
+            title: '積極的に休憩と水分補給を',
+            details: ['運動や作業を行う際は、定期的に休憩を取る。', '喉が渇く前に水分・塩分を補給することを意識する。', '自分の体調の変化に注意を払う。']
+        }
+    },
+    CAUTION: { 
+        level: '注意', color: '#22c55e', textColor: 'text-green-500', bgColor: 'bg-green-500', tableBgColor: 'bg-green-200',
+        advice: {
+            title: '適宜、水分補給を忘れずに',
+            details: ['一般的に危険性は低いが、油断は禁物。', '激しい運動や重労働を行う際は、熱中症になる可能性があるため、適宜水分・塩分を補給する。']
+        }
+    }
+};
+
+// --- DOM ELEMENTS ---
+const cityInput = document.getElementById('cityInput');
+const searchBtn = document.getElementById('searchBtn');
+const gpsBtn = document.getElementById('gpsBtn');
+const historyContainer = document.getElementById('historyContainer');
+const loader = document.getElementById('loader');
+const errorMessage = document.getElementById('error-message');
+const errorText = document.getElementById('error-text');
+const mainContent = document.getElementById('main-content');
+const locationName = document.getElementById('locationName');
+const currentWbgt = document.getElementById('currentWbgt');
+const riskLevelText = document.getElementById('riskLevelText');
+const currentTemp = document.getElementById('currentTemp');
+const currentHumidity = document.getElementById('currentHumidity');
+const maxWbgtValue = document.getElementById('maxWbgtValue');
+const maxWbgtTime = document.getElementById('maxWbgtTime');
+const hourlyForecast = document.getElementById('hourlyForecast');
+const dailyForecast = document.getElementById('dailyForecast');
+const gaugeMeter = document.getElementById('gaugeMeter');
+const openModalBtn = document.getElementById('openModalBtn');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const safetyModal = document.getElementById('safetyModal');
+const modalContent = document.getElementById('modalContent');
+const toggleTableBtn = document.getElementById('toggleTableBtn');
+const wbgtTableContainer = document.getElementById('wbgtTableContainer');
+const wbgtTableHeader = document.getElementById('wbgtTableHeader');
+const wbgtTableBody = document.getElementById('wbgtTableBody');
+const tableCaret = document.getElementById('tableCaret');
+
+// --- HELPER & CALCULATION FUNCTIONS ---
+
+const calculateWBGT = (temp, rh) => {
+    if (typeof temp !== 'number' || typeof rh !== 'number') return 0;
+    const e = (rh / 100) * 6.105 * Math.exp((17.27 * temp) / (237.7 + temp));
+    return 0.567 * temp + 0.393 * e + 3.94;
+};
+
+const getRiskInfo = (wbgt) => {
+    if (wbgt >= 31) return RISK_LEVELS.DANGER;
+    if (wbgt >= 28) return RISK_LEVELS.SEVERE_VIGILANCE;
+    if (wbgt >= 25) return RISK_LEVELS.VIGILANCE;
+    return RISK_LEVELS.CAUTION;
+};
+
+const getWeatherIconClass = (iconCode) => {
+    switch (iconCode) {
+        case '01d': return 'fas fa-sun text-yellow-500';
+        case '01n': return 'fas fa-moon text-blue-300';
+        case '02d': return 'fas fa-cloud-sun text-yellow-600';
+        case '02n': return 'fas fa-cloud-moon text-blue-400';
+        case '03d': case '03n': case '04d': case '04n': return 'fas fa-cloud text-gray-500';
+        case '09d': case '09n': return 'fas fa-cloud-showers-heavy text-blue-600';
+        case '10d': return 'fas fa-cloud-sun-rain text-blue-500';
+        case '10n': return 'fas fa-cloud-moon-rain text-blue-500';
+        case '11d': case '11n': return 'fas fa-bolt text-yellow-400';
+        case '13d': case '13n': return 'far fa-snowflake text-cyan-400';
+        case '50d': case '50n': return 'fas fa-smog text-gray-400';
+        default: return 'fas fa-question-circle text-gray-400';
+    }
+};
+
+// --- UI UPDATE FUNCTIONS ---
+
+const setUIState = (state) => {
+    loader.classList.add('hidden');
+    errorMessage.classList.add('hidden');
+    mainContent.classList.add('hidden');
+
+    if (state === 'loading') loader.classList.remove('hidden');
+    else if (state === 'error') errorMessage.classList.remove('hidden');
+    else if (state === 'success') mainContent.classList.remove('hidden');
+};
+
+const displayError = (message) => {
+    errorText.textContent = message;
+    setUIState('error');
+};
+
+const updateGauge = (wbgt) => {
+    const riskInfo = getRiskInfo(wbgt);
+    const minWbgt = 15;
+    const maxWbgt = 35;
+    const percent = Math.max(0, Math.min(100, ((wbgt - minWbgt) / (maxWbgt - minWbgt)) * 100));
+    gaugeMeter.style.strokeDashoffset = 100 - percent;
+    gaugeMeter.style.stroke = riskInfo.color;
+};
+
+const generateWbgtTable = () => {
+    const temps = Array.from({length: 11}, (_, i) => 25 + i); // 25°C to 35°C
+    const humids = Array.from({length: 11}, (_, i) => 40 + i * 5); // 40% to 90%
+
+    let headerHtml = '<tr><th class="border">温度℃ / 湿度%</th>';
+    humids.forEach(h => headerHtml += `<th class="border">${h}</th>`);
+    headerHtml += '</tr>';
+    wbgtTableHeader.innerHTML = headerHtml;
+
+    let bodyHtml = '';
+    temps.forEach(t => {
+        bodyHtml += '<tr>';
+        bodyHtml += `<td class="border">${t}</td>`;
+        humids.forEach(h => {
+            const wbgt = calculateWBGT(t, h);
+            const riskInfo = getRiskInfo(wbgt);
+            bodyHtml += `<td class="border ${riskInfo.tableBgColor} font-medium">${wbgt.toFixed(1)}</td>`;
+        });
+        bodyHtml += '</tr>';
+    });
+    wbgtTableBody.innerHTML = bodyHtml;
+};
+
+const highlightCurrentCellInTable = (currentTemp, currentHumid) => {
+    const oldHighlight = document.querySelector('.highlight-cell');
+    if (oldHighlight) {
+        oldHighlight.classList.remove('highlight-cell');
+    }
+    
+    if (typeof currentTemp !== 'number' || typeof currentHumid !== 'number') return;
+
+    const temps = Array.from({length: 11}, (_, i) => 25 + i);
+    const humids = Array.from({length: 11}, (_, i) => 40 + i * 5);
+    const closestTemp = temps.reduce((prev, curr) => (Math.abs(curr - currentTemp) < Math.abs(prev - currentTemp) ? curr : prev));
+    const closestHumid = humids.reduce((prev, curr) => (Math.abs(curr - currentHumid) < Math.abs(prev - currentHumid) ? curr : prev));
+
+    const tempIndex = temps.indexOf(closestTemp);
+    const humidIndex = humids.indexOf(closestHumid);
+
+    if (tempIndex >= 0 && humidIndex >= 0) {
+        if (wbgtTableBody.rows[tempIndex] && wbgtTableBody.rows[tempIndex].cells[humidIndex + 1]) {
+            const cell = wbgtTableBody.rows[tempIndex].cells[humidIndex + 1];
+            cell.classList.add('highlight-cell');
+        }
+    }
+};
+
+const renderWeatherData = (data) => {
+    // 1. Current Weather
+    const currentMain = data.current.main || {};
+    const currentTempVal = currentMain.temp || 0;
+    const currentHumidityVal = currentMain.humidity || 0;
+    const currentWbgtVal = calculateWBGT(currentTempVal, currentHumidityVal);
+    const currentRiskInfo = getRiskInfo(currentWbgtVal);
+    locationName.textContent = data.locationName || '取得不可';
+    currentWbgt.textContent = currentWbgtVal.toFixed(1);
+    riskLevelText.textContent = currentRiskInfo.level;
+    riskLevelText.className = `text-3xl font-bold mb-2 ${currentRiskInfo.textColor}`;
+    currentTemp.textContent = `${Math.round(currentTempVal)}℃`;
+    currentHumidity.textContent = `${Math.round(currentHumidityVal)}%`;
+    updateGauge(currentWbgtVal);
+
+    highlightCurrentCellInTable(currentTempVal, currentHumidityVal);
+    addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
+
+    // 2. Today's Max WBGT (next 24h)
+    const hourlyData = data.forecast.list || [];
+    const next24hForecasts = hourlyData.slice(0, 8);
+    let maxWbgtInfo = { wbgt: -999, dt: 0 };
+    if (next24hForecasts.length > 0) {
+        maxWbgtInfo = next24hForecasts.map(item => ({
+            wbgt: calculateWBGT(item.main.temp, item.main.humidity),
+            dt: item.dt
+        })).reduce((max, current) => (current.wbgt > max.wbgt) ? current : max, { wbgt: -999, dt: 0 });
+    }
+
+    if (maxWbgtInfo.dt > 0) {
+        const maxTime = new Date(maxWbgtInfo.dt * 1000);
+        maxWbgtValue.textContent = maxWbgtInfo.wbgt.toFixed(1);
+        maxWbgtTime.textContent = `(${maxTime.getHours()}:00頃)`;
+    } else {
+        maxWbgtValue.textContent = '--';
+        maxWbgtTime.textContent = '';
+    }
+
+    // 3. Hourly Forecast (Numerical Display)
+    hourlyForecast.innerHTML = '';
+    const forecastItems = hourlyData.slice(0, 8);
+    forecastItems.forEach(item => {
+        const date = new Date((item.dt || 0) * 1000);
+        const main = item.main || {};
+        const temp = main.temp || 0;
+        const humidity = main.humidity || 0;
+        const weather = (item.weather && item.weather.length > 0) ? item.weather[0] : {};
+        const hourWbgt = calculateWBGT(temp, humidity);
+        const hourRiskInfo = getRiskInfo(hourWbgt);
+        
+        const card = `
+            <div class="flex-shrink-0 text-center p-3 rounded-lg bg-gray-100 w-24">
+                <p class="font-semibold text-gray-700">${date.getHours()}:00</p>
+                <div class="my-2 space-y-1">
+                    <p class="font-bold text-lg ${hourRiskInfo.textColor}">${hourWbgt.toFixed(1)}<span class="text-xs">℃</span></p>
+                    <p class="text-sm text-gray-600">${Math.round(temp)}℃</p>
+                    <p class="text-sm text-blue-500">${humidity}%</p>
+                </div>
+                <i class="${getWeatherIconClass(weather.icon || '01d')} fa-lg"></i>
+            </div>`;
+        hourlyForecast.innerHTML += card;
+    });
+
+
+    // 4. Daily Forecast
+    dailyForecast.innerHTML = '';
+    const dailyDataAggregated = {};
+    const todayStr = new Date().toISOString().split('T')[0];
+    hourlyData.forEach(item => {
+        const dateStr = new Date(item.dt * 1000).toISOString().split('T')[0];
+        if (!dailyDataAggregated[dateStr]) {
+            dailyDataAggregated[dateStr] = { temps: [], humidities: [], weathers: [], dts: [] };
+        }
+        dailyDataAggregated[dateStr].temps.push(item.main.temp);
+        dailyDataAggregated[dateStr].humidities.push(item.main.humidity);
+        dailyDataAggregated[dateStr].weathers.push(item.weather[0]);
+        dailyDataAggregated[dateStr].dts.push(item.dt);
+    });
+
+    Object.keys(dailyDataAggregated)
+        .filter(dateStr => dateStr !== todayStr)
+        .forEach(dateStr => {
+            const dayData = dailyDataAggregated[dateStr];
+            const maxTemp = Math.max(...dayData.temps);
+            const minTemp = Math.min(...dayData.temps);
+            const maxTempIndex = dayData.temps.indexOf(maxTemp);
+            const humidity = dayData.humidities[maxTempIndex] || dayData.humidities[0];
+            const middayDt = dayData.dts.reduce((a, b) => Math.abs(new Date(b*1000).getHours() - 12) < Math.abs(new Date(a*1000).getHours() - 12) ? b : a);
+            const weather = dayData.weathers[dayData.dts.indexOf(middayDt)] || dayData.weathers[0];
+            const date = new Date(dayData.dts[0] * 1000);
+            const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+            const dailyWbgt = calculateWBGT(maxTemp, humidity);
+            const dailyRiskInfo = getRiskInfo(dailyWbgt);
+
+            const item = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
+                    <div class="w-1/3 font-semibold text-gray-700">${date.getMonth() + 1}/${date.getDate()} (${dayOfWeek})</div>
+                    <div class="w-1/3 flex justify-center items-center gap-3"><i class="${getWeatherIconClass(weather.icon)} fa-2x"></i><span class="font-bold text-lg ${dailyRiskInfo.textColor}">${dailyWbgt.toFixed(1)}℃</span></div>
+                    <div class="w-1/3 text-right text-sm text-gray-600"><span class="text-red-500">${Math.round(maxTemp)}℃</span> / <span class="text-blue-500">${Math.round(minTemp)}℃</span></div>
+                </div>`;
+            dailyForecast.innerHTML += item;
+        });
+
+    // 5. Modal Content
+    modalContent.innerHTML = `<div class="p-4 rounded-lg" style="background-color: ${currentRiskInfo.color}20;">
+            <h3 class="text-xl font-bold ${currentRiskInfo.textColor}">${currentRiskInfo.level}</h3>
+            <p class="font-semibold mt-2">${currentRiskInfo.advice.title}</p>
+            <ul class="list-disc list-inside mt-2 space-y-1 text-gray-700">
+                ${currentRiskInfo.advice.details.map(d => `<li>${d}</li>`).join('')}
+            </ul>
+        </div>
+        <div class="mt-6 space-y-4">
+            ${Object.values(RISK_LEVELS).filter(r => r.level !== currentRiskInfo.level).map(risk => `<div class="p-4 rounded-lg bg-gray-100">
+                    <h3 class="text-lg font-bold ${risk.textColor}">${risk.level}</h3>
+                    <p class="font-semibold mt-1">${risk.advice.title}</p>
+                </div>`).join('')}
+        </div>`;
+    setUIState('success');
+};
+
+// --- SEARCH HISTORY ---
+const getSearchHistory = () => JSON.parse(localStorage.getItem('wbgtSearchHistory') || '[]');
+
+const addSearchToHistory = (location) => {
+    let history = getSearchHistory();
+    history = history.filter(item => item.name.toLowerCase() !== location.name.toLowerCase());
+    history.unshift(location);
+    localStorage.setItem('wbgtSearchHistory', JSON.stringify(history.slice(0, 5)));
+    renderSearchHistory();
+};
+
+const renderSearchHistory = () => {
+    historyContainer.innerHTML = '';
+    const history = getSearchHistory();
+    if (history.length > 0) {
+        historyContainer.innerHTML += '<h4 class="w-full text-sm font-semibold text-gray-500 mb-1">検索履歴:</h4>';
+        history.forEach(location => {
+            const button = document.createElement('button');
+            button.className = 'bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm hover:bg-gray-300 transition-colors';
+            button.textContent = location.name;
+            button.onclick = () => {
+                cityInput.value = location.name;
+                fetchWeather(location.lat, location.lon, location.name);
+            };
+            historyContainer.appendChild(button);
+        });
+    }
+};
+
+
+// --- API FETCH LOGIC ---
+const fetchWeather = async (lat, lon, locationName) => {
+    setUIState('loading');
+    const currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
+    const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
+
+    try {
+        const [currentResponse, forecastResponse] = await Promise.all([fetch(currentWeatherUrl), fetch(forecastUrl)]);
+        if (!currentResponse.ok) throw new Error(`現在情報の取得に失敗: ${(await currentResponse.json()).message}`);
+        if (!forecastResponse.ok) throw new Error(`予報情報の取得に失敗: ${(await forecastResponse.json()).message}`);
+        
+        const currentData = await currentResponse.json();
+        const forecastData = await forecastResponse.json();
+        
+        if (!currentData.main || !forecastData.list) throw new Error("気象サービスから不完全なデータを受信しました。");
+        
+        renderWeatherData({ locationName, current: currentData, forecast: forecastData });
+    } catch (error) {
+        console.error("Fetch Weather Error:", error);
+        displayError(`天気情報の取得に失敗しました: ${error.message}`);
+    }
+};
+
+const getCoordsByCity = async (city) => {
+    const fetchCoords = async (query) => {
+        const response = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)},JP&limit=1&appid=${API_KEY}`);
+        if (!response.ok) throw new Error('地名からの座標取得に失敗しました。');
+        return response.json();
+    };
+
+    try {
+        let geoData = await fetchCoords(city);
+        if (geoData.length === 0) {
+            const match = city.match(/^(...??[都道府県])(.+)$/);
+            if (match && match[2]) geoData = await fetchCoords(match[2]);
+        }
+        if (geoData.length === 0) throw new Error(`「${city}」が見つかりませんでした。`);
+        
+        const { lat, lon, local_names } = geoData[0];
+        const locationName = (local_names && local_names.ja) ? local_names.ja : geoData[0].name;
+        await fetchWeather(lat, lon, locationName);
+    } catch (error) {
+        console.error("Get Coords Error:", error);
+        displayError(error.message);
+    }
+};
+
+const getWeatherByGPS = async () => {
+    setUIState('loading');
+    try {
+        if (!navigator.geolocation) {
+            throw new Error("お使いのブラウザは位置情報取得に対応していません。");
+        }
+        if (!window.isSecureContext) {
+             throw new Error("位置情報取得は安全な接続(HTTPS)でのみ利用可能です。");
+        }
+
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 0,
+            });
+        });
+
+        const { latitude, longitude } = position.coords;
+        const response = await fetch(`https://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${API_KEY}`);
+        const data = await response.json();
+        const name = (data.length > 0 && data[0].local_names && data[0].local_names.ja) ? data[0].local_names.ja : '現在地';
+        await fetchWeather(latitude, longitude, name);
+
+    } catch (error) {
+        let message;
+        if (error.code) {
+            switch (error.code) {
+                case 1: message = "位置情報の利用が許可されていません。ブラウザまたは端末の設定をご確認ください。"; break;
+                case 2: message = "位置情報が取得できませんでした。端末のGPSがオンになっているか確認し、電波の良い場所で再度お試しください。"; break;
+                case 3: message = "位置情報の取得がタイムアウトしました。"; break;
+                default: message = `不明なエラーが発生しました (コード: ${error.code})。`; break;
+            }
+        } else {
+            message = error.message;
+        }
+        displayError(message);
+    }
+};
+
+
+// --- EVENT LISTENERS & INITIALIZATION ---
+const handleSearch = () => {
+    if (cityInput.value.trim()) {
+        setUIState('loading');
+        getCoordsByCity(cityInput.value.trim());
+    }
+};
+
+searchBtn.addEventListener('click', handleSearch);
+cityInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSearch(); });
+gpsBtn.addEventListener('click', getWeatherByGPS);
+
+toggleTableBtn.addEventListener('click', () => {
+    wbgtTableContainer.classList.toggle('hidden');
+    tableCaret.classList.toggle('fa-chevron-down');
+    tableCaret.classList.toggle('fa-chevron-up');
+});
+
+openModalBtn.addEventListener('click', () => safetyModal.classList.remove('opacity-0', 'pointer-events-none'));
+closeModalBtn.addEventListener('click', () => safetyModal.classList.add('opacity-0', 'pointer-events-none'));
+safetyModal.addEventListener('click', (e) => {
+    if (e.target === safetyModal) safetyModal.classList.add('opacity-0', 'pointer-events-none');
+});
+
+window.addEventListener('load', () => {
+    if (!API_KEY) return displayError("開発者エラー: APIキーが設定されていません。");
+    generateWbgtTable();
+    renderSearchHistory();
+    
+    const history = getSearchHistory();
+    if (history.length > 0) {
+        const lastLocation = history[0];
+        cityInput.value = lastLocation.name;
+        fetchWeather(lastLocation.lat, lastLocation.lon, lastLocation.name);
+    } else {
+        setUIState('loading');
+        getCoordsByCity("東京");
+    }
+});
+
+</script>
+</body>
+</html>
