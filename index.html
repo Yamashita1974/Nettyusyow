@@ -153,21 +153,6 @@
             opacity: 1;
             transform: translateY(0);
         }
-        /* お気に入りボタン */
-        .star-btn {
-            color: #cbd5e1; /* gray-300 */
-            transition: color 0.2s;
-        }
-        .star-btn.favorited {
-            color: #f59e0b; /* yellow-500 */
-        }
-        .dark .star-btn {
-             color: #4b5563; /* gray-600 */
-        }
-        .dark .star-btn.favorited {
-             color: #f59e0b; /* yellow-500 */
-        }
-
         /* 症状ガイドタブ */
         .symptom-tab {
             transition: all 0.2s ease-in-out;
@@ -239,14 +224,9 @@
             </div>
         </div>
 
-        <!-- 検索履歴とお気に入り -->
+        <!-- 検索履歴 -->
         <div id="historyContainer" class="flex flex-wrap gap-2 mb-6 justify-center items-center">
              <!-- History buttons will be inserted here -->
-        </div>
-
-        <!-- お気に入り地点 -->
-        <div id="favorites-container" class="mb-6">
-            <!-- Favorite locations will be inserted here -->
         </div>
         
         <!-- エラーメッセージ -->
@@ -513,7 +493,6 @@ const hourlyCardsContainer = document.getElementById('hourly-cards-container');
 const openSymptomCheckerBtn = document.getElementById('openSymptomCheckerBtn');
 const symptomModal = document.getElementById('symptomModal');
 const symptomModalContent = document.getElementById('symptomModalContent');
-const favoritesContainer = document.getElementById('favorites-container');
 const symptomTabs = document.getElementById('symptom-tabs');
 const symptomPanels = document.querySelectorAll('.symptom-panel');
 
@@ -652,9 +631,7 @@ const renderWeatherData = (data) => {
     updateGauge(currentWbgtVal);
 
     highlightCurrentCellInTable(currentTempVal, currentHumidityVal);
-    if(data.isNewSearch) {
-      addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
-    }
+    addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
 
     // 2. Today's or Tomorrow's Max WBGT
     const hourlyData = data.forecast.list || [];
@@ -843,86 +820,34 @@ const renderHourlyChart = (hourlyData) => {
     });
 };
 
-// --- FAVORITES & HISTORY ---
-const getFavorites = () => JSON.parse(localStorage.getItem('wbgtFavorites') || '[]');
-const saveFavorites = (favorites) => localStorage.setItem('wbgtFavorites', JSON.stringify(favorites));
-
+// --- HISTORY ---
 const getSearchHistory = () => JSON.parse(localStorage.getItem('wbgtSearchHistory') || '[]');
 const addSearchToHistory = (location) => {
     let history = getSearchHistory();
     history = history.filter(item => !(item.lat === location.lat && item.lon === location.lon));
     history.unshift(location);
     localStorage.setItem('wbgtSearchHistory', JSON.stringify(history.slice(0, 5)));
-    renderHistoryAndFavorites();
+    renderHistory();
 };
 
-const renderHistoryAndFavorites = () => {
+const renderHistory = () => {
     historyContainer.innerHTML = '';
     const history = getSearchHistory();
-    const favorites = getFavorites();
     if(history.length > 0) {
         historyContainer.innerHTML += '<h4 class="w-full text-sm font-semibold text-gray-500 mb-2 text-center">検索履歴</h4>';
         history.forEach(location => {
-            const isFavorited = favorites.some(fav => fav.lat === location.lat && fav.lon === location.lon);
             const buttonHtml = `
-                <button data-lat="${location.lat}" data-lon="${location.lon}" data-name="${location.name}" class="history-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm hover:bg-gray-300 transition-colors flex items-center gap-2">
+                <button data-lat="${location.lat}" data-lon="${location.lon}" data-name="${location.name}" class="history-btn bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm hover:bg-gray-300 transition-colors">
                     <span>${location.name}</span>
-                    <i class="star-btn fas fa-star ${isFavorited ? 'favorited' : ''}"></i>
                 </button>
             `;
             historyContainer.innerHTML += buttonHtml;
         });
     }
-
-    renderFavorites();
 };
-
-const renderFavorites = async () => {
-    favoritesContainer.innerHTML = '';
-    const favorites = getFavorites();
-
-    if (favorites.length > 0) {
-        favoritesContainer.innerHTML = '<h3 class="text-xl font-bold text-gray-800 mb-4">お気に入り地点</h3>';
-        const favoriteGrid = document.createElement('div');
-        favoriteGrid.className = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
-        favoritesContainer.appendChild(favoriteGrid);
-
-        for(const [index, fav] of favorites.entries()) {
-            const card = document.createElement('div');
-            card.className = 'favorite-card bg-white rounded-lg shadow p-4 flex justify-between items-center';
-            card.innerHTML = `<div class="w-2/3"><p class="font-bold text-gray-800 truncate">${fav.name}</p><p id="fav-wbgt-${index}" class="text-sm text-gray-500">読み込み中...</p></div> <div id="fav-risk-${index}" class="text-lg font-bold">--</div>`;
-            favoriteGrid.appendChild(card);
-            setTimeout(() => card.classList.add('visible'), index * 100);
-        }
-        
-        await updateFavoritesData();
-    }
-};
-
-const updateFavoritesData = async () => {
-    const favorites = getFavorites();
-    for(const [index, fav] of favorites.entries()) {
-        try {
-            const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${fav.lat}&lon=${fav.lon}&appid=${API_KEY}&units=metric`);
-            if(!response.ok) continue;
-            const data = await response.json();
-            const wbgt = calculateWBGT(data.main.temp, data.main.humidity);
-            const riskInfo = getRiskInfo(wbgt);
-
-            const wbgtEl = document.getElementById(`fav-wbgt-${index}`);
-            const riskEl = document.getElementById(`fav-risk-${index}`);
-            if(wbgtEl) wbgtEl.textContent = `WBGT: ${wbgt.toFixed(1)}℃`;
-            if(riskEl) {
-                riskEl.textContent = riskInfo.level;
-                riskEl.className = `text-lg font-bold ${riskInfo.textColor}`;
-            }
-        } catch(e) { /* silent fail */ }
-    }
-};
-
 
 // --- API FETCH LOGIC ---
-const fetchWeather = async (lat, lon, locationName, isNewSearch = true) => {
+const fetchWeather = async (lat, lon, locationName) => {
     setUIState('loading');
     const currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=ja`;
@@ -937,7 +862,7 @@ const fetchWeather = async (lat, lon, locationName, isNewSearch = true) => {
         
         if (!currentData.main || !forecastData.list) throw new Error("気象サービスから不完全なデータを受信しました。");
         
-        renderWeatherData({ locationName, current: currentData, forecast: forecastData, isNewSearch });
+        renderWeatherData({ locationName, current: currentData, forecast: forecastData, isNewSearch: true });
     } catch (error) {
         console.error("Fetch Weather Error:", error);
         displayError(`天気情報の取得に失敗しました: ${error.message}`);
@@ -1112,30 +1037,10 @@ cityInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSea
 gpsBtn.addEventListener('click', getWeatherByGPS);
 
 historyContainer.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target.closest('.star-btn')) {
-        const button = target.closest('.history-btn');
-        const location = {
-            name: button.dataset.name,
-            lat: parseFloat(button.dataset.lat),
-            lon: parseFloat(button.dataset.lon),
-        };
-        
-        let favorites = getFavorites();
-        const existingIndex = favorites.findIndex(fav => fav.lat === location.lat && fav.lon === location.lon);
-
-        if (existingIndex > -1) {
-            favorites.splice(existingIndex, 1);
-        } else {
-            favorites.unshift(location);
-        }
-        saveFavorites(favorites);
-        renderHistoryAndFavorites();
-
-    } else if(target.closest('.history-btn')) {
-        const button = target.closest('.history-btn');
-        cityInput.value = button.dataset.name;
-        fetchWeather(parseFloat(button.dataset.lat), parseFloat(button.dataset.lon), button.dataset.name, false);
+    const target = e.target.closest('.history-btn');
+    if (target) {
+        cityInput.value = target.dataset.name;
+        fetchWeather(parseFloat(target.dataset.lat), parseFloat(target.dataset.lon));
     }
 });
 
@@ -1247,13 +1152,13 @@ window.addEventListener('load', () => {
 
     if (!API_KEY || API_KEY === "YOUR_API_KEY_HERE") return displayError("開発者エラー: APIキーが設定されていません。");
     generateWbgtTable();
-    renderHistoryAndFavorites();
+    renderHistory();
     
     const history = getSearchHistory();
     if (history.length > 0) {
         const lastLocation = history[0];
         cityInput.value = lastLocation.name;
-        fetchWeather(lastLocation.lat, lastLocation.lon, lastLocation.name, false);
+        fetchWeather(lastLocation.lat, lastLocation.lon);
     } else {
         getCoordsByCity("東京");
     }
