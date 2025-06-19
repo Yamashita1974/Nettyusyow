@@ -4,20 +4,80 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>熱中症リスク予報</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* 基本のフォント設定 */
         body {
             font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
         }
-        .gauge-bg {
-            stroke: #e5e7eb; /* gray-200 */
+        /* ダークモード設定 */
+        .dark {
+            color-scheme: dark;
         }
+        .dark body {
+            background-color: #111827; /* gray-900 */
+            color: #d1d5db; /* gray-300 */
+        }
+        .dark .bg-white {
+            background-color: #1f2937; /* gray-800 */
+        }
+        .dark .bg-gray-100 {
+            background-color: #374151; /* gray-700 */
+        }
+        .dark .bg-gray-200 {
+             background-color: #4b5563; /* gray-600 */
+        }
+        .dark .text-gray-800 {
+            color: #f9fafb; /* gray-50 */
+        }
+        .dark .text-gray-700 {
+            color: #d1d5db; /* gray-300 */
+        }
+        .dark .text-gray-600 {
+            color: #9ca3af; /* gray-400 */
+        }
+         .dark .text-gray-500 {
+            color: #6b7280; /* gray-500 */
+        }
+        .dark .border-gray-300 {
+            border-color: #4b5563; /* gray-600 */
+        }
+        .dark .hover\:bg-gray-50:hover {
+            background-color: #374151; /* gray-700 */
+        }
+        .dark .wbgt-table th:first-child, .dark .wbgt-table td:first-child {
+            background-color: #374151; /* gray-700 */
+        }
+        .dark .wbgt-table thead th {
+             background-color: #4b5563; /* gray-600 */
+        }
+        /* --- FIX START: 早見表のテキスト色を修正 --- */
+        .dark .wbgt-table th,
+        .dark .wbgt-table td:first-child {
+            color: #f9fafb; /* gray-50 */
+        }
+        .dark .wbgt-table td {
+             color: #1f2937; /* gray-800 */
+        }
+        /* --- FIX END --- */
+        .dark .source-table th {
+            background-color: #374151; /* gray-700 */
+        }
+        .dark .source-table th, .dark .source-table td {
+             border-color: #4b5563; /* gray-600 */
+        }
+
+
+        /* ゲージのアニメーション */
         .gauge-meter {
             stroke-linecap: round;
             transition: stroke-dashoffset 1s ease-out;
         }
+        /* モーダルのトランジション */
         .modal {
             transition: opacity 0.3s ease;
         }
@@ -30,7 +90,7 @@
         }
         .wbgt-table th:first-child, .wbgt-table td:first-child {
             font-weight: 600;
-            background-color: #f9fafb; /* gray-50 */
+            background-color: #f9fafb;
             position: sticky;
             left: 0;
             z-index: 10;
@@ -38,21 +98,27 @@
         .wbgt-table thead th {
             position: sticky;
             top: 0;
-            background-color: #f3f4f6; /* gray-200 */
+            background-color: #f3f4f6;
             z-index: 20;
         }
-        /* ハイライト表示用のスタイル */
+        /* ハイライト表示 */
         .highlight-cell {
-            position: relative; /* z-indexを有効にするために必要 */
-            box-shadow: inset 0 0 0 3px #3b82f6; /* blue-500 */
+            position: relative;
+            box-shadow: inset 0 0 0 3px #3b82f6;
             z-index: 30;
         }
-        /* ローディング中の背景 */
+        .source-table th, .source-table td {
+            border: 1px solid #d1d5db;
+            padding: 8px;
+            text-align: left;
+        }
+        /* ローディング中のブラー効果 */
         .content-loading {
             filter: blur(4px);
             opacity: 0.6;
             transition: filter 0.3s, opacity 0.3s;
         }
+        /* ローディングオーバーレイ */
         .loader-overlay {
             position: fixed;
             top: 0;
@@ -66,7 +132,29 @@
             align-items: center;
             justify-content: center;
         }
+        .dark .loader-overlay {
+            background-color: rgba(17, 24, 39, 0.7);
+        }
 
+        /* 危険度テキストのアニメーション */
+        @keyframes flash {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.05); }
+        }
+        .animate-flash {
+            animation: flash 0.5s ease-in-out;
+        }
+
+        /* 予報カードのフェードインアニメーション */
+        .forecast-card {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .forecast-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -78,9 +166,13 @@
     <div id="app-container" class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
         
         <!-- ヘッダー -->
-        <header class="text-center mb-6">
+        <header class="relative text-center mb-6">
             <h1 class="text-3xl font-bold text-gray-800">熱中症リスク予報</h1>
-            <p class="text-sm text-gray-500 mt-1">現場の安全管理をサポートします</p>
+            <p class="text-sm text-gray-500 mt-1">相生エンジニアリング株式会社の安全内規に準拠</p>
+            <!-- ダークモードトグル -->
+            <button id="theme-toggle" class="absolute top-0 right-0 p-2 text-lg text-gray-500 hover:text-blue-500 dark:hover:text-yellow-300 transition-colors">
+                <i id="theme-icon" class="fas fa-moon"></i>
+            </button>
         </header>
 
         <!-- 場所検索 -->
@@ -102,7 +194,7 @@
         <div id="historyContainer" class="flex flex-wrap gap-2 mb-6 justify-center">
             <!-- History buttons will be inserted here -->
         </div>
-
+        
         <!-- エラーメッセージ -->
         <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
             <p class="font-bold">エラー</p>
@@ -131,6 +223,8 @@
                     <div class="text-center md:text-left">
                         <p id="riskLevelText" class="text-3xl font-bold mb-2">---</p>
                         <p class="text-gray-600 mb-4">現在の気象情報:</p>
+                        <!-- 日時表示 -->
+                        <p id="currentDateTime" class="text-sm text-gray-500 -mt-3 mb-3">-- 時点</p>
                         <div class="flex justify-center md:justify-start gap-4 text-gray-700">
                             <div class="flex items-center gap-2">
                                 <i class="fas fa-temperature-high text-red-500"></i>
@@ -142,14 +236,24 @@
                             </div>
                         </div>
                          <div class="mt-4 border-t pt-4">
-                            <p class="text-sm font-semibold text-gray-700">今日の最高WBGT</p>
+                            <p id="maxWbgtLabel" class="text-sm font-semibold text-gray-700">今日の最高WBGT (9-17時)</p>
                             <p class="text-xl font-bold text-red-600">
                                 <span id="maxWbgtValue">--</span>℃
                                 <span class="text-sm font-medium text-gray-500" id="maxWbgtTime">(--:--)</span>
                             </p>
+                            <div class="flex justify-center md:justify-start gap-4 text-sm text-gray-600 mt-1">
+                                <div class="flex items-center gap-1">
+                                    <i class="fas fa-temperature-high text-red-400"></i>
+                                    <span id="maxWbgtTemp">--℃</span>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <i class="fas fa-tint text-blue-400"></i>
+                                    <span id="maxWbgtHumidity">--%</span>
+                                </div>
+                            </div>
                         </div>
                         <button id="openModalBtn" class="mt-4 w-full md:w-auto bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                            <i class="fas fa-book-open"></i> <span>対策ガイドを確認</span>
+                            <i class="fas fa-info-circle"></i> <span>凡例</span>
                         </button>
                     </div>
                 </div>
@@ -167,12 +271,24 @@
                         <tbody id="wbgtTableBody"></tbody>
                     </table>
                 </div>
+                <!-- 注釈を追加 -->
+                <p class="text-xs text-gray-500 mt-2 pl-1">
+                    ※早見表は一般的な参考値です。ハイライトされたマスの値は、現在の気象情報から計算された画面中央の推定値とは異なる場合があります。
+                </p>
             </div>
 
             <!-- 時間別予報 -->
             <div class="bg-white rounded-xl shadow-md p-6 mb-6">
-                <h3 class="text-xl font-bold text-gray-800 mb-4">時間別予報 (24時間)</h3>
-                <div class="overflow-x-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold text-gray-800">時間別予報 (24時間)</h3>
+                    <button id="toggle-forecast-view" class="p-2 text-lg text-gray-500 hover:text-blue-500">
+                        <i id="forecast-view-icon" class="fas fa-chart-line"></i>
+                    </button>
+                </div>
+                 <div id="hourly-chart-container" class="hidden" style="height: 250px;">
+                    <canvas id="hourlyChartCanvas"></canvas>
+                </div>
+                <div id="hourly-cards-container" class="overflow-x-auto">
                     <div id="hourlyForecast" class="flex space-x-4 pb-2">
                         <!-- Hourly cards will be inserted here -->
                     </div>
@@ -197,17 +313,11 @@
         </div>
     </div>
 
-    <!-- 対策ガイド モーダル -->
+    <!-- 凡例モーダル -->
     <div id="safetyModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div class="p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-gray-800">熱中症 対策ガイド</h2>
-                    <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
-                </div>
-                <div id="modalContent" class="prose max-w-none">
-                    <!-- Modal content will be inserted here -->
-                </div>
+            <div id="modalContent" class="p-6">
+                <!-- Modal content will be inserted here -->
             </div>
         </div>
     </div>
@@ -218,35 +328,22 @@
 const API_KEY = "f8139ad62e30fe98dca264701ef32699"; 
 
 const RISK_LEVELS = {
-    DANGER: { 
-        level: '危険', color: '#ef4444', textColor: 'text-red-500', bgColor: 'bg-red-500', tableBgColor: 'bg-red-200',
-        advice: {
-            title: '原則、作業は中止',
-            details: ['涼しい室内へ避難する。', '激しい運動や作業は絶対に避ける。', 'こまめな水分・塩分補給はもちろん、体を冷やす工夫（濡れタオル、送風など）を行う。']
-        }
-    },
-    SEVERE_VIGILANCE: { 
-        level: '厳重警戒', color: '#f97316', textColor: 'text-orange-500', bgColor: 'bg-orange-500', tableBgColor: 'bg-orange-200',
-        advice: {
-            title: '激しい作業は避け、休憩を頻繁に',
-            details: ['熱中症の危険性が高い状態。屋外での激しい運動や作業は避ける。', '1時間に1回など、こまめに休憩を取り、涼しい場所で体を休める。', '積極的に水分・塩分を補給する。']
-        }
-    },
-    VIGILANCE: { 
-        level: '警戒', color: '#f59e0b', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500', tableBgColor: 'bg-yellow-200',
-        advice: {
-            title: '積極的に休憩と水分補給を',
-            details: ['運動や作業を行う際は、定期的に休憩を取る。', '喉が渇く前に水分・塩分を補給することを意識する。', '自分の体調の変化に注意を払う。']
-        }
-    },
-    CAUTION: { 
-        level: '注意', color: '#22c55e', textColor: 'text-green-500', bgColor: 'bg-green-500', tableBgColor: 'bg-green-200',
-        advice: {
-            title: '適宜、水分補給を忘れずに',
-            details: ['一般的に危険性は低いが、油断は禁物。', '激しい運動や重労働を行う際は、熱中症になる可能性があるため、適宜水分・塩分を補給する。']
-        }
-    }
+    DANGER: { level: '危険', color: '#ef4444', textColor: 'text-red-500', bgColor: 'bg-red-500', tableBgColor: 'bg-red-200' },
+    SEVERE_VIGILANCE: { level: '厳重警戒', color: '#f97316', textColor: 'text-orange-500', bgColor: 'bg-orange-500', tableBgColor: 'bg-orange-200' },
+    VIGILANCE: { level: '警戒', color: '#f59e0b', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500', tableBgColor: 'bg-yellow-200' },
+    CAUTION: { level: '注意', color: '#22c55e', textColor: 'text-green-500', bgColor: 'bg-green-500', tableBgColor: 'bg-green-200' }
 };
+
+const SOURCE_DATA = [
+    { wbgt: "31～", level: "危険", detail: "すべての生活活動で熱中症の危険性。高齢者においては安静状態でも発生する危険性が大きい。外出はなるべく避け、涼しい室内に移動する。" },
+    { wbgt: "28～31", level: "厳重警戒", detail: "外出時は炎天下を避け、室内では室温の上昇に注意する。すべての生活活動で熱中症の危険性あり。" },
+    { wbgt: "25～28", level: "警戒", detail: "中等度以上の生活活動や、激しい運動をする際は、定期的に十分な休息を取り入れる。" },
+    { wbgt: "～25", level: "注意", detail: "中等度以上の生活活動や、激しい運動をする際は、熱中症の危険性がある。" }
+];
+
+let currentWeatherData = null;
+let lastRiskLevel = '';
+let hourlyChart = null;
 
 // --- DOM ELEMENTS ---
 const appContainer = document.getElementById('app-container');
@@ -263,13 +360,16 @@ const currentWbgt = document.getElementById('currentWbgt');
 const riskLevelText = document.getElementById('riskLevelText');
 const currentTemp = document.getElementById('currentTemp');
 const currentHumidity = document.getElementById('currentHumidity');
+const currentDateTime = document.getElementById('currentDateTime');
 const maxWbgtValue = document.getElementById('maxWbgtValue');
 const maxWbgtTime = document.getElementById('maxWbgtTime');
+const maxWbgtTemp = document.getElementById('maxWbgtTemp');
+const maxWbgtHumidity = document.getElementById('maxWbgtHumidity');
+const maxWbgtLabel = document.getElementById('maxWbgtLabel');
 const hourlyForecast = document.getElementById('hourlyForecast');
 const dailyForecast = document.getElementById('dailyForecast');
 const gaugeMeter = document.getElementById('gaugeMeter');
 const openModalBtn = document.getElementById('openModalBtn');
-const closeModalBtn = document.getElementById('closeModalBtn');
 const safetyModal = document.getElementById('safetyModal');
 const modalContent = document.getElementById('modalContent');
 const toggleTableBtn = document.getElementById('toggleTableBtn');
@@ -277,9 +377,15 @@ const wbgtTableContainer = document.getElementById('wbgtTableContainer');
 const wbgtTableHeader = document.getElementById('wbgtTableHeader');
 const wbgtTableBody = document.getElementById('wbgtTableBody');
 const tableCaret = document.getElementById('tableCaret');
+const themeToggle = document.getElementById('theme-toggle');
+const themeIcon = document.getElementById('theme-icon');
+const toggleForecastViewBtn = document.getElementById('toggle-forecast-view');
+const forecastViewIcon = document.getElementById('forecast-view-icon');
+const hourlyChartContainer = document.getElementById('hourly-chart-container');
+const hourlyCardsContainer = document.getElementById('hourly-cards-container');
+
 
 // --- HELPER & CALCULATION FUNCTIONS ---
-
 const calculateWBGT = (temp, rh) => {
     if (typeof temp !== 'number' || typeof rh !== 'number') return 0;
     const e = (rh / 100) * 6.105 * Math.exp((17.27 * temp) / (237.7 + temp));
@@ -294,27 +400,19 @@ const getRiskInfo = (wbgt) => {
 };
 
 const getWeatherIconClass = (iconCode) => {
-    switch (iconCode) {
-        case '01d': return 'fas fa-sun text-yellow-500';
-        case '01n': return 'fas fa-moon text-blue-300';
-        case '02d': return 'fas fa-cloud-sun text-yellow-600';
-        case '02n': return 'fas fa-cloud-moon text-blue-400';
-        case '03d': case '03n': case '04d': case '04n': return 'fas fa-cloud text-gray-500';
-        case '09d': case '09n': return 'fas fa-cloud-showers-heavy text-blue-600';
-        case '10d': return 'fas fa-cloud-sun-rain text-blue-500';
-        case '10n': return 'fas fa-cloud-moon-rain text-blue-500';
-        case '11d': case '11n': return 'fas fa-bolt text-yellow-400';
-        case '13d': case '13n': return 'far fa-snowflake text-cyan-400';
-        case '50d': case '50n': return 'fas fa-smog text-gray-400';
-        default: return 'fas fa-question-circle text-gray-400';
-    }
+    const iconMap = {
+        '01d': 'fas fa-sun text-yellow-500', '01n': 'fas fa-moon text-blue-300', '02d': 'fas fa-cloud-sun text-yellow-600', '02n': 'fas fa-cloud-moon text-blue-400',
+        '03d': 'fas fa-cloud text-gray-500', '03n': 'fas fa-cloud text-gray-500', '04d': 'fas fa-cloud text-gray-500', '04n': 'fas fa-cloud text-gray-500',
+        '09d': 'fas fa-cloud-showers-heavy text-blue-600', '09n': 'fas fa-cloud-showers-heavy text-blue-600', '10d': 'fas fa-cloud-sun-rain text-blue-500', '10n': 'fas fa-cloud-moon-rain text-blue-500',
+        '11d': 'fas fa-bolt text-yellow-400', '11n': 'fas fa-bolt text-yellow-400', '13d': 'far fa-snowflake text-cyan-400', '13n': 'far fa-snowflake text-cyan-400',
+        '50d': 'fas fa-smog text-gray-400', '50n': 'fas fa-smog text-gray-400',
+    };
+    return iconMap[iconCode] || 'fas fa-question-circle text-gray-400';
 };
 
 // --- UI UPDATE FUNCTIONS ---
-
 const setUIState = (state) => {
     errorMessage.classList.add('hidden');
-    
     if (state === 'loading') {
         loader.classList.remove('hidden');
         appContainer.classList.add('content-loading');
@@ -323,6 +421,8 @@ const setUIState = (state) => {
         appContainer.classList.remove('content-loading');
         if (state === 'error') {
             errorMessage.classList.remove('hidden');
+        } else if (state === 'success') {
+            mainContent.classList.remove('hidden');
         }
     }
 };
@@ -389,16 +489,31 @@ const highlightCurrentCellInTable = (currentTemp, currentHumid) => {
 };
 
 const renderWeatherData = (data) => {
+    currentWeatherData = data;
     // 1. Current Weather
     const currentMain = data.current.main || {};
     const currentTempVal = currentMain.temp || 0;
     const currentHumidityVal = currentMain.humidity || 0;
     const currentWbgtVal = calculateWBGT(currentTempVal, currentHumidityVal);
     const currentRiskInfo = getRiskInfo(currentWbgtVal);
+
+    const observationTime = new Date(data.current.dt * 1000);
+    const formattedTime = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(observationTime);
+    currentDateTime.textContent = `${formattedTime} 時点`;
+
     locationName.textContent = data.locationName || '取得不可';
     currentWbgt.textContent = currentWbgtVal.toFixed(1);
+    
+    if (lastRiskLevel && lastRiskLevel !== currentRiskInfo.level) {
+        riskLevelText.classList.add('animate-flash');
+        riskLevelText.addEventListener('animationend', () => {
+            riskLevelText.classList.remove('animate-flash');
+        }, { once: true });
+    }
     riskLevelText.textContent = currentRiskInfo.level;
     riskLevelText.className = `text-3xl font-bold mb-2 ${currentRiskInfo.textColor}`;
+    lastRiskLevel = currentRiskInfo.level;
+
     currentTemp.textContent = `${Math.round(currentTempVal)}℃`;
     currentHumidity.textContent = `${Math.round(currentHumidityVal)}%`;
     updateGauge(currentWbgtVal);
@@ -408,31 +523,60 @@ const renderWeatherData = (data) => {
       addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
     }
 
-
-    // 2. Today's Max WBGT (next 24h)
+    // 2. Today's or Tomorrow's Max WBGT (9:00 - 17:00)
     const hourlyData = data.forecast.list || [];
-    const next24hForecasts = hourlyData.slice(0, 8); // 3-hour intervals for 24 hours
-    let maxWbgtInfo = { wbgt: -999, dt: 0 };
-    if (next24hForecasts.length > 0) {
-        maxWbgtInfo = next24hForecasts.map(item => ({
+    const now = new Date();
+    
+    let targetDate = new Date(now);
+    let labelText = "今日の最高WBGT (9-17時)";
+
+    if (now.getHours() >= 17) {
+        targetDate.setDate(targetDate.getDate() + 1);
+        labelText = `明日の最高WBGT (9-17時)`;
+    }
+    
+    maxWbgtLabel.textContent = labelText;
+
+    const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 9, 0, 0);
+    const targetEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 17, 0, 0);
+
+    const dayTimeForecasts = hourlyData.filter(item => {
+        const itemDate = new Date(item.dt * 1000);
+        return itemDate >= targetStart && itemDate <= targetEnd;
+    });
+
+    let maxWbgtInfo = { wbgt: -999, dt: 0, temp: 0, humidity: 0 };
+    if (dayTimeForecasts.length > 0) {
+        maxWbgtInfo = dayTimeForecasts.map(item => ({
             wbgt: calculateWBGT(item.main.temp, item.main.humidity),
-            dt: item.dt
-        })).reduce((max, current) => (current.wbgt > max.wbgt) ? current : max, { wbgt: currentWbgtVal, dt: data.current.dt });
+            dt: item.dt,
+            temp: item.main.temp,
+            humidity: item.main.humidity
+        })).reduce((max, current) => (current.wbgt > max.wbgt) ? current : max, maxWbgtInfo);
+    }
+    
+    const isToday = now.getDate() === targetDate.getDate() && now.getMonth() === targetDate.getMonth();
+    if (isToday && currentWbgtVal > maxWbgtInfo.wbgt && now >= targetStart && now <= targetEnd) {
+        maxWbgtInfo = { wbgt: currentWbgtVal, dt: data.current.dt, temp: currentTempVal, humidity: currentHumidityVal };
     }
 
     if (maxWbgtInfo.dt > 0) {
         const maxTime = new Date(maxWbgtInfo.dt * 1000);
         maxWbgtValue.textContent = maxWbgtInfo.wbgt.toFixed(1);
         maxWbgtTime.textContent = `(${maxTime.getHours()}:00頃)`;
+        maxWbgtTemp.textContent = `${Math.round(maxWbgtInfo.temp)}℃`;
+        maxWbgtHumidity.textContent = `${Math.round(maxWbgtInfo.humidity)}%`;
     } else {
         maxWbgtValue.textContent = '--';
-        maxWbgtTime.textContent = '';
+        maxWbgtTime.textContent = '(データなし)';
+        maxWbgtTemp.textContent = `--℃`;
+        maxWbgtHumidity.textContent = `--%`;
     }
 
-    // 3. Hourly Forecast (Numerical Display)
+    // 3. Hourly Forecast Cards
     hourlyForecast.innerHTML = '';
     const forecastItems = hourlyData.slice(0, 8);
-    forecastItems.forEach(item => {
+    forecastItems.forEach((item, index) => {
         const date = new Date((item.dt || 0) * 1000);
         const main = item.main || {};
         const temp = main.temp || 0;
@@ -441,24 +585,27 @@ const renderWeatherData = (data) => {
         const hourWbgt = calculateWBGT(temp, humidity);
         const hourRiskInfo = getRiskInfo(hourWbgt);
         
-        const card = `
-            <div class="flex-shrink-0 text-center p-3 rounded-lg bg-gray-100 w-24">
-                <p class="font-semibold text-gray-700">${date.getHours()}:00</p>
-                <div class="my-2 space-y-1">
-                    <p class="font-bold text-lg ${hourRiskInfo.textColor}">${hourWbgt.toFixed(1)}<span class="text-xs">℃</span></p>
-                    <p class="text-sm text-gray-600">${Math.round(temp)}℃</p>
-                    <p class="text-sm text-blue-500">${humidity}%</p>
-                </div>
-                <i class="${getWeatherIconClass(weather.icon || '01d')} fa-lg"></i>
-            </div>`;
-        hourlyForecast.innerHTML += card;
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'forecast-card flex-shrink-0 text-center p-3 rounded-lg bg-gray-100 w-24';
+        cardDiv.innerHTML = `<p class="font-semibold text-gray-700">${date.getHours()}:00</p>
+            <div class="my-2 space-y-1">
+                <p class="font-bold text-lg ${hourRiskInfo.textColor}">${hourWbgt.toFixed(1)}<span class="text-xs">℃</span></p>
+                <p class="text-sm text-gray-600">${Math.round(temp)}℃</p>
+                <p class="text-sm text-blue-500">${humidity}%</p>
+            </div>
+            <i class="${getWeatherIconClass(weather.icon || '01d')} fa-lg"></i>`;
+        hourlyForecast.appendChild(cardDiv);
+        
+        setTimeout(() => { cardDiv.classList.add('visible'); }, index * 100);
     });
+    
+    // 4. Hourly Forecast Chart
+    renderHourlyChart(hourlyData.slice(0, 24));
 
-
-    // 4. Daily Forecast
+    // 5. Daily Forecast
     dailyForecast.innerHTML = '';
     const dailyDataAggregated = {};
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayDateStr = new Date().toISOString().split('T')[0];
     hourlyData.forEach(item => {
         const dateStr = new Date(item.dt * 1000).toISOString().split('T')[0];
         if (!dailyDataAggregated[dateStr]) {
@@ -471,8 +618,8 @@ const renderWeatherData = (data) => {
     });
 
     Object.keys(dailyDataAggregated)
-        .filter(dateStr => dateStr !== todayStr)
-        .forEach(dateStr => {
+        .filter(dateStr => dateStr !== todayDateStr)
+        .forEach((dateStr, index) => {
             const dayData = dailyDataAggregated[dateStr];
             const maxTemp = Math.max(...dayData.temps);
             const minTemp = Math.min(...dayData.temps);
@@ -485,29 +632,99 @@ const renderWeatherData = (data) => {
             const dailyWbgt = calculateWBGT(maxTemp, humidity);
             const dailyRiskInfo = getRiskInfo(dailyWbgt);
 
-            const item = `<div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50">
-                    <div class="w-1/3 font-semibold text-gray-700">${date.getMonth() + 1}/${date.getDate()} (${dayOfWeek})</div>
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'forecast-card flex items-center justify-between p-3 rounded-lg hover:bg-gray-50';
+            itemDiv.innerHTML = `<div class="w-1/3 font-semibold text-gray-700">${date.getMonth() + 1}/${date.getDate()} (${dayOfWeek})</div>
                     <div class="w-1/3 flex justify-center items-center gap-3"><i class="${getWeatherIconClass(weather.icon)} fa-2x"></i><span class="font-bold text-lg ${dailyRiskInfo.textColor}">${dailyWbgt.toFixed(1)}℃</span></div>
-                    <div class="w-1/3 text-right text-sm text-gray-600"><span class="text-red-500">${Math.round(maxTemp)}℃</span> / <span class="text-blue-500">${Math.round(minTemp)}℃</span></div>
-                </div>`;
-            dailyForecast.innerHTML += item;
+                    <div class="w-1/3 text-right text-sm text-gray-600"><span class="text-red-500">${Math.round(maxTemp)}℃</span> / <span class="text-blue-500">${Math.round(minTemp)}℃</span></div>`;
+            dailyForecast.appendChild(itemDiv);
+
+            setTimeout(() => { itemDiv.classList.add('visible'); }, index * 100);
         });
 
-    // 5. Modal Content
-    modalContent.innerHTML = `<div class="p-4 rounded-lg" style="background-color: ${currentRiskInfo.color}20;">
-            <h3 class="text-xl font-bold ${currentRiskInfo.textColor}">${currentRiskInfo.level}</h3>
-            <p class="font-semibold mt-2">${currentRiskInfo.advice.title}</p>
-            <ul class="list-disc list-inside mt-2 space-y-1 text-gray-700">
-                ${currentRiskInfo.advice.details.map(d => `<li>${d}</li>`).join('')}
-            </ul>
-        </div>
-        <div class="mt-6 space-y-4">
-            ${Object.values(RISK_LEVELS).filter(r => r.level !== currentRiskInfo.level).map(risk => `<div class="p-4 rounded-lg bg-gray-100">
-                    <h3 class="text-lg font-bold ${risk.textColor}">${risk.level}</h3>
-                    <p class="font-semibold mt-1">${risk.advice.title}</p>
-                </div>`).join('')}
-        </div>`;
     setUIState('success');
+};
+
+const renderHourlyChart = (hourlyData) => {
+    if(hourlyChart) {
+        hourlyChart.destroy();
+    }
+    const ctx = document.getElementById('hourlyChartCanvas').getContext('2d');
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+    const textColor = isDarkMode ? '#d1d5db' : '#374151';
+
+    const labels = hourlyData.map(item => `${new Date(item.dt * 1000).getHours()}:00`);
+    const wbgtData = hourlyData.map(item => calculateWBGT(item.main.temp, item.main.humidity).toFixed(1));
+    const tempData = hourlyData.map(item => Math.round(item.main.temp));
+    const humidityData = hourlyData.map(item => item.main.humidity);
+    
+    hourlyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'WBGT (℃)',
+                    data: wbgtData,
+                    borderColor: '#f97316', // orange-500
+                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    fill: true,
+                },
+                {
+                    label: '気温 (℃)',
+                    data: tempData,
+                    borderColor: '#ef4444', // red-500
+                    backgroundColor: 'transparent',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                },
+                {
+                    label: '湿度 (%)',
+                    data: humidityData,
+                    borderColor: '#3b82f6', // blue-500
+                    backgroundColor: 'transparent',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            scales: {
+                x: {
+                    ticks: { color: textColor },
+                    grid: { color: gridColor }
+                },
+                y: {
+                    type: 'linear',
+                    position: 'left',
+                    title: { display: true, text: '温度 (℃)', color: textColor },
+                    ticks: { color: textColor },
+                    grid: { color: gridColor }
+                },
+                y1: {
+                    type: 'linear',
+                    position: 'right',
+                    title: { display: true, text: '湿度 (%)', color: textColor },
+                    min: 0,
+                    max: 100,
+                    ticks: { color: textColor },
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            plugins: {
+                legend: { labels: { color: textColor } }
+            }
+        }
+    });
 };
 
 // --- SEARCH HISTORY ---
@@ -593,16 +810,15 @@ const getWeatherByGPS = async () => {
         if (!navigator.geolocation) {
             throw new Error("お使いのブラウザは位置情報取得に対応していません。");
         }
-        // HTTPS接続でない場合もエラーとする
         if (!window.isSecureContext) {
              throw new Error("位置情報取得は安全な接続(HTTPS)でのみ利用可能です。");
         }
 
         const position = await new Promise((resolve, reject) => {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
-                enableHighAccuracy: false, // 低精度で十分なので高速化
-                timeout: 10000, // 10秒でタイムアウト
-                maximumAge: 0, // 常に最新の位置情報を要求
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 0,
             });
         });
 
@@ -646,14 +862,73 @@ toggleTableBtn.addEventListener('click', () => {
     tableCaret.classList.toggle('fa-chevron-up');
 });
 
-openModalBtn.addEventListener('click', () => safetyModal.classList.remove('opacity-0', 'pointer-events-none'));
-closeModalBtn.addEventListener('click', () => safetyModal.classList.add('opacity-0', 'pointer-events-none'));
+modalContent.addEventListener('click', (e) => {
+    if (e.target.closest('#closeModalBtn')) {
+        safetyModal.classList.add('opacity-0', 'pointer-events-none');
+    }
+});
+
 safetyModal.addEventListener('click', (e) => {
-    if (e.target === safetyModal) safetyModal.classList.add('opacity-0', 'pointer-events-none');
+    if (e.target === safetyModal) {
+        safetyModal.classList.add('opacity-0', 'pointer-events-none');
+    }
+});
+
+openModalBtn.addEventListener('click', () => {
+    let sourceTableHtml = '<table class="w-full source-table border-collapse"><thead><tr><th class="bg-gray-100">WBGT(℃)</th><th class="bg-gray-100">危険度</th><th class="bg-gray-100">注意事項</th></tr></thead><tbody>';
+    SOURCE_DATA.forEach(row => {
+        let riskInfo;
+        switch(row.level) {
+            case '危険': riskInfo = RISK_LEVELS.DANGER; break;
+            case '厳重警戒': riskInfo = RISK_LEVELS.SEVERE_VIGILANCE; break;
+            case '警戒': riskInfo = RISK_LEVELS.VIGILANCE; break;
+            case '注意': riskInfo = RISK_LEVELS.CAUTION; break;
+            default: riskInfo = { textColor: 'text-gray-700' };
+        }
+        sourceTableHtml += `<tr><td class="font-mono text-center">${row.wbgt}</td><td class="${riskInfo.textColor} font-bold text-center">${row.level}</td><td>${row.detail}</td></tr>`;
+    });
+    sourceTableHtml += '</tbody></table><p class="text-xs text-gray-500 mt-2">出典: 環境省 熱中症予防情報サイト</p>';
+
+    modalContent.innerHTML = `
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold text-gray-800">凡例</h2>
+            <button id="closeModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div>
+            ${sourceTableHtml}
+        </div>`;
+
+    safetyModal.classList.remove('opacity-0', 'pointer-events-none');
+});
+
+themeToggle.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    themeIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    // グラフが描画済みであれば再描画してテーマを反映
+    if(currentWeatherData) {
+        renderHourlyChart(currentWeatherData.forecast.list.slice(0, 24));
+    }
+});
+
+toggleForecastViewBtn.addEventListener('click', () => {
+    hourlyChartContainer.classList.toggle('hidden');
+    hourlyCardsContainer.classList.toggle('hidden');
+    const isChartVisible = !hourlyChartContainer.classList.contains('hidden');
+    forecastViewIcon.className = isChartVisible ? 'fas fa-th-large' : 'fas fa-chart-line';
 });
 
 window.addEventListener('load', () => {
-    if (!API_KEY) return displayError("開発者エラー: APIキーが設定されていません。");
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (savedTheme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        themeIcon.className = 'fas fa-sun';
+    } else {
+        document.documentElement.classList.remove('dark');
+        themeIcon.className = 'fas fa-moon';
+    }
+
+    if (!API_KEY || API_KEY === "YOUR_API_KEY_HERE") return displayError("開発者エラー: APIキーが設定されていません。");
     generateWbgtTable();
     renderSearchHistory();
     
