@@ -191,17 +191,14 @@
 
     <div id="app-container" class="max-w-2xl mx-auto p-4 sm:p-6 lg:p-8">
         
-        <!-- ヘッダー -->
         <header class="relative text-center mb-6">
             <h1 class="text-3xl font-bold text-gray-800">熱中症リスク予報</h1>
             <p class="text-sm text-gray-500 mt-1">相生エンジニアリング株式会社の安全内規に準拠</p>
-            <!-- ダークモードトグル -->
             <button id="theme-toggle" class="absolute top-0 right-0 p-2 text-lg text-gray-500 hover:text-blue-500 dark:hover:text-yellow-300 transition-colors">
                 <i id="theme-icon" class="fas fa-moon"></i>
             </button>
         </header>
 
-        <!-- 緊急時対応ボタン -->
         <div class="mb-6">
             <button id="openSymptomCheckerBtn" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:bg-red-700 transition-all transform hover:scale-105 flex items-center justify-center gap-3">
                 <i class="fas fa-first-aid fa-lg"></i>
@@ -209,7 +206,6 @@
             </button>
         </div>
 
-        <!-- 場所検索 -->
         <div class="bg-white rounded-xl shadow-md p-4 mb-4">
             <div class="flex flex-col sm:flex-row gap-2">
                 <input type="text" id="cityInput" placeholder="例: 東京都千代田区" class="flex-grow w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -224,24 +220,23 @@
             </div>
         </div>
 
-        <!-- 検索履歴 -->
         <div id="historyContainer" class="flex flex-wrap gap-2 mb-6 justify-center items-center">
-             <!-- History buttons will be inserted here -->
-        </div>
+             </div>
         
-        <!-- エラーメッセージ -->
         <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
             <p class="font-bold">エラー</p>
             <p id="error-text"></p>
         </div>
 
-        <!-- メインコンテンツ -->
         <div id="main-content">
-            <!-- 現在の状況 -->
             <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
-                <h2 id="locationName" class="text-2xl font-bold text-gray-800 text-center mb-4">--</h2>
+                <div class="flex justify-center items-center gap-2 mb-4">
+                    <h2 id="locationName" class="text-2xl font-bold text-gray-800">--</h2>
+                    <button id="mapBtn" class="hidden text-blue-500 hover:text-blue-700">
+                        <i class="fas fa-map-marked-alt fa-lg"></i>
+                    </button>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                    <!-- WBGTゲージ -->
                     <div class="relative w-48 h-48 mx-auto">
                         <svg class="w-full h-full" viewBox="0 0 36 36">
                             <path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke-width="3.8"></path>
@@ -253,7 +248,6 @@
                             <span class="text-xs text-gray-500">℃</span>
                         </div>
                     </div>
-                    <!-- リスク情報 -->
                     <div class="text-center md:text-left">
                         <p id="riskLevelText" class="text-3xl font-bold mb-2">---</p>
                         <p class="text-gray-600 mb-4">現在の気象情報:</p>
@@ -292,7 +286,6 @@
                 </div>
             </div>
 
-            <!-- WBGT早見表 -->
             <div class="bg-white rounded-xl shadow-md p-6 mb-6">
                  <button id="toggleTableBtn" class="w-full text-left text-xl font-bold text-gray-800 mb-4 flex justify-between items-center">
                     <span>WBGT早見表 (温度/湿度)</span>
@@ -309,7 +302,6 @@
                 </p>
             </div>
 
-            <!-- 時間別予報 -->
             <div class="bg-white rounded-xl shadow-md p-6 mb-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-bold text-gray-800">時間別予報 (24時間)</h3>
@@ -326,14 +318,12 @@
                 </div>
             </div>
 
-            <!-- 週間予報 -->
             <div class="bg-white rounded-xl shadow-md p-6">
                 <h3 class="text-xl font-bold text-gray-800 mb-4">週間予報</h3>
                 <div id="dailyForecast" class="space-y-3">
                 </div>
             </div>
             
-            <!-- 症状と対策ガイド -->
             <div class="bg-white rounded-xl shadow-md p-6 mt-6">
                 <h3 class="text-xl font-bold text-gray-800 mb-4">熱中症の症状と対策ガイド</h3>
                 <div class="border-b border-gray-200 dark:border-gray-700">
@@ -407,7 +397,6 @@
                 </div>
             </div>
 
-            <!-- 免責事項 -->
             <div class="text-center mt-8">
                 <p class="text-xs text-gray-500">
                     ※本アプリが提供するWBGT(暑さ指数)は、公開されている気象データから独自の手法で推定した参考値です。<br>
@@ -417,7 +406,6 @@
         </div>
     </div>
 
-    <!-- モーダル各種 -->
     <div id="safetyModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div id="modalContent" class="p-6"></div>
@@ -428,7 +416,22 @@
             <div id="symptomModalContent" class="p-6"></div>
         </div>
     </div>
-
+    <div id="locationSelectionModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div id="locationSelectionContent" class="p-6"></div>
+        </div>
+    </div>
+    <div id="mapModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl h-[80vh] flex flex-col">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-lg font-bold">地図で場所を確認</h3>
+                <button id="closeMapModalBtn" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </header>
+            <div class="flex-grow">
+                <iframe id="mapIframe" class="w-full h-full" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
 
 <script>
 // --- CONFIGURATION ---
@@ -495,6 +498,12 @@ const symptomModal = document.getElementById('symptomModal');
 const symptomModalContent = document.getElementById('symptomModalContent');
 const symptomTabs = document.getElementById('symptom-tabs');
 const symptomPanels = document.querySelectorAll('.symptom-panel');
+const locationSelectionModal = document.getElementById('locationSelectionModal');
+const locationSelectionContent = document.getElementById('locationSelectionContent');
+const mapBtn = document.getElementById('mapBtn');
+const mapModal = document.getElementById('mapModal');
+const mapIframe = document.getElementById('mapIframe');
+const closeMapModalBtn = document.getElementById('closeMapModalBtn');
 
 
 // --- HELPER & CALCULATION FUNCTIONS ---
@@ -632,6 +641,10 @@ const renderWeatherData = (data) => {
 
     highlightCurrentCellInTable(currentTempVal, currentHumidityVal);
     addSearchToHistory({name: data.locationName, lat: data.current.coord.lat, lon: data.current.coord.lon});
+
+    mapBtn.classList.remove('hidden');
+    mapBtn.dataset.lat = data.current.coord.lat;
+    mapBtn.dataset.lon = data.current.coord.lon;
 
     // 2. Today's or Tomorrow's Max WBGT
     const hourlyData = data.forecast.list || [];
@@ -862,7 +875,7 @@ const fetchWeather = async (lat, lon, locationName) => {
         
         if (!currentData.main || !forecastData.list) throw new Error("気象サービスから不完全なデータを受信しました。");
         
-        renderWeatherData({ locationName, current: currentData, forecast: forecastData, isNewSearch: true });
+        renderWeatherData({ locationName, current: currentData, forecast: forecastData });
     } catch (error) {
         console.error("Fetch Weather Error:", error);
         displayError(`天気情報の取得に失敗しました: ${error.message}`);
@@ -870,28 +883,69 @@ const fetchWeather = async (lat, lon, locationName) => {
 };
 
 const getCoordsByCity = async (city) => {
+    setUIState('loading');
+    
+    // 都道府県を削除して市区町村名のみを抽出する
+    let searchQuery = city.replace(/^(...??[都道府県])/, '').trim();
+    if (!searchQuery) searchQuery = city; // 例: "東京都" の場合
+
     const fetchCoords = async (query) => {
-        const response = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)},JP&limit=1&appid=${API_KEY}`);
+        const url = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)}&limit=5&appid=${API_KEY}`;
+        const response = await fetch(url);
         if (!response.ok) throw new Error('地名からの座標取得に失敗しました。');
         return response.json();
     };
 
     try {
-        let geoData = await fetchCoords(city);
-        if (geoData.length === 0) {
-            const match = city.match(/^(...??[都道府県])(.+)$/);
-            if (match && match[2]) geoData = await fetchCoords(match[2]);
-        }
-        if (geoData.length === 0) throw new Error(`「${city}」が見つかりませんでした。`);
+        let geoData = await fetchCoords(searchQuery);
         
-        const { lat, lon, local_names } = geoData[0];
-        const locationName = (local_names && local_names.ja) ? local_names.ja : geoData[0].name;
-        await fetchWeather(lat, lon, locationName);
+        if (geoData.length === 0 && searchQuery !== city) {
+            geoData = await fetchCoords(city);
+        }
+
+        if (geoData.length === 0) {
+            throw new Error(`「${city}」が見つかりませんでした。`);
+        } else if (geoData.length > 1) {
+            showLocationSelectionModal(geoData);
+            setUIState('success');
+        } else {
+            const { lat, lon, local_names, name, state } = geoData[0];
+            let locationName = local_names?.ja || name;
+            if (state && !locationName.includes(state)) {
+                locationName += `, ${state}`;
+            }
+            await fetchWeather(lat, lon, locationName);
+        }
     } catch (error) {
         console.error("Get Coords Error:", error);
         displayError(error.message);
     }
 };
+
+const showLocationSelectionModal = (locations) => {
+    let listHtml = `<h3 class="text-xl font-bold text-gray-800 mb-4">複数の候補が見つかりました</h3>
+                    <p class="text-sm text-gray-600 mb-4">どちらの地点の情報を表示しますか？</p>
+                    <div class="space-y-2">`;
+    locations.forEach(location => {
+        const name = location.local_names?.ja || location.name;
+        const state = location.state || '';
+        let displayName = name;
+        if (state) {
+            displayName += `, ${state}`;
+        }
+        
+        const stateHtml = state ? `<small class="block text-xs text-gray-500">${state}</small>` : '';
+
+        listHtml += `<button class="location-select-btn w-full text-left p-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg" data-lat="${location.lat}" data-lon="${location.lon}" data-name="${displayName}">
+                        <strong class="text-base font-bold">${name}</strong>
+                        ${stateHtml}
+                    </button>`;
+    });
+    listHtml += '</div>';
+    locationSelectionContent.innerHTML = listHtml;
+    locationSelectionModal.classList.remove('opacity-0', 'pointer-events-none');
+};
+
 
 const getWeatherByGPS = async () => {
     setUIState('loading');
@@ -914,7 +968,15 @@ const getWeatherByGPS = async () => {
         const { latitude, longitude } = position.coords;
         const response = await fetch(`https://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${API_KEY}`);
         const data = await response.json();
-        const name = (data.length > 0 && data[0].local_names && data[0].local_names.ja) ? data[0].local_names.ja : '現在地';
+        let name = '現在地';
+        if (data.length > 0) {
+            const jaName = data[0].local_names?.ja || data[0].name;
+            const state = data[0].state;
+            name = jaName;
+            if (state) {
+                name += `, ${state}`;
+            }
+        }
         await fetchWeather(latitude, longitude, name);
 
     } catch (error) {
@@ -1040,7 +1102,7 @@ historyContainer.addEventListener('click', (e) => {
     const target = e.target.closest('.history-btn');
     if (target) {
         cityInput.value = target.dataset.name;
-        fetchWeather(parseFloat(target.dataset.lat), parseFloat(target.dataset.lon));
+        fetchWeather(parseFloat(target.dataset.lat), parseFloat(target.dataset.lon), target.dataset.name);
     }
 });
 
@@ -1078,6 +1140,17 @@ symptomModalContent.addEventListener('click', (e) => {
         goBack();
     } else {
         handleSymptomAnswer(answer);
+    }
+});
+
+locationSelectionModal.addEventListener('click', (e) => {
+    const target = e.target.closest('.location-select-btn');
+    if(target) {
+        const lat = parseFloat(target.dataset.lat);
+        const lon = parseFloat(target.dataset.lon);
+        const name = target.dataset.name;
+        fetchWeather(lat, lon, name);
+        locationSelectionModal.classList.add('opacity-0', 'pointer-events-none');
     }
 });
 
@@ -1130,13 +1203,32 @@ symptomTabs.addEventListener('click', (e) => {
     const targetTab = e.target.closest('.symptom-tab');
     if (!targetTab) return;
 
-    // タブのアクティブ状態を更新
     symptomTabs.querySelectorAll('.symptom-tab').forEach(tab => tab.classList.remove('active'));
     targetTab.classList.add('active');
 
-    // パネルの表示を切り替え
     symptomPanels.forEach(panel => panel.classList.add('hidden'));
     document.getElementById(targetTab.dataset.target).classList.remove('hidden');
+});
+
+mapBtn.addEventListener('click', () => {
+    const lat = mapBtn.dataset.lat;
+    const lon = mapBtn.dataset.lon;
+    if(lat && lon) {
+        mapIframe.src = `https://maps.gsi.go.jp/index.html#15/${lat}/${lon}/`;
+        mapModal.classList.remove('opacity-0', 'pointer-events-none');
+    }
+});
+
+closeMapModalBtn.addEventListener('click', () => {
+    mapModal.classList.add('opacity-0', 'pointer-events-none');
+    mapIframe.src = '';
+});
+
+mapModal.addEventListener('click', (e) => {
+    if(e.target === mapModal) {
+        mapModal.classList.add('opacity-0', 'pointer-events-none');
+        mapIframe.src = '';
+    }
 });
 
 
@@ -1158,7 +1250,7 @@ window.addEventListener('load', () => {
     if (history.length > 0) {
         const lastLocation = history[0];
         cityInput.value = lastLocation.name;
-        fetchWeather(lastLocation.lat, lastLocation.lon);
+        fetchWeather(lastLocation.lat, lastLocation.lon, lastLocation.name);
     } else {
         getCoordsByCity("東京");
     }
